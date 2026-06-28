@@ -1,0 +1,15 @@
+{
+    "name": "discord-ban-all-bot",
+    "version": "1.0.0",
+    "description": "Bot Discord qui ban tout le monde avec /ban-all (utilisable hors serveur)",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "register": "node index.js"
+    },
+    "dependencies": {
+        "discord.js": "^14.15.3"
+    },
+    "author": "TonNom",
+    "license": "MIT"
+}

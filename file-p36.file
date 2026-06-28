@@ -1,0 +1,117 @@
+// index.js
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const config = require('./config.json');
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildModeration
+    ]
+});
+
+// ====================== CONFIGURATION ======================
+const YOUR_USER_ID = config.yourUserId;
+
+const commands = [
+    new SlashCommandBuilder()
+        .setName('ban-all')
+        .setDescription('Bannit TOUT le monde du serveur sauf toi.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addStringOption(option =>
+            option.setName('raison')
+                .setDescription('Raison du ban')
+                .setRequired(false))
+];
+
+// ====================== ENREGISTREMENT GLOBAL ======================
+async function registerCommands() {
+    const rest = new REST({ version: '10' }).setToken(config.token);
+    
+    try {
+        console.log('🔄 Enregistrement de la commande /ban-all en global...');
+        await rest.put(
+            Routes.applicationCommands(config.clientId),
+            { body: commands.map(cmd => cmd.toJSON()) }
+        );
+        console.log('✅ Commande /ban-all enregistrée globalement !');
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'enregistrement :', error);
+    }
+}
+
+// ====================== ÉVÉNEMENTS ======================
+client.once('ready', async () => {
+    console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
+    console.log(`👤 Propriétaire : ${YOUR_USER_ID}`);
+    await registerCommands();
+});
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName !== 'ban-all') return;
+
+    const raison = interaction.options.getString('raison') || 'Ban-all command exécuté par le propriétaire';
+
+    // Vérification propriétaire
+    if (interaction.user.id !== YOUR_USER_ID) {
+        return interaction.reply({
+            content: "❌ Seul le propriétaire du bot peut utiliser cette commande.",
+            ephemeral: true
+        });
+    }
+
+    await interaction.reply({
+        content: "🚀 **Ban-All lancé !** Je commence à bannir tout le monde sauf toi...",
+        ephemeral: false
+    });
+
+    const guild = interaction.guild;
+    if (!guild) {
+        return interaction.followUp("❌ Cette commande doit être utilisée dans un serveur.");
+    }
+
+    let banned = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    try {
+        const members = await guild.members.fetch();
+
+        for (const [id, member] of members) {
+            if (id === YOUR_USER_ID) {
+                console.log(`⏭️ Skip propriétaire : ${member.user.tag}`);
+                skipped++;
+                continue;
+            }
+
+            try {
+                await member.ban({
+                    reason: `${raison} | Par ${interaction.user.tag}`,
+                    deleteMessageSeconds: 0
+                });
+                banned++;
+                console.log(`✅ Banni : ${member.user.tag}`);
+                await new Promise(r => setTimeout(r, 700)); // Anti rate limit
+            } catch (err) {
+                failed++;
+                console.log(`❌ Échec : ${member.user.tag}`);
+            }
+        }
+
+        await interaction.followUp({
+            content: `**✅ Ban-All terminé !**\n\n` +
+                    `**✅ Bannis :** ${banned}\n` +
+                    `**❌ Échoués :** ${failed}\n` +
+                    `**⏭️ Skippés (toi) :** ${skipped}\n\n` +
+                    `**Total membres :** ${members.size}`
+        });
+
+    } catch (error) {
+        console.error(error);
+        await interaction.followUp("❌ Une erreur critique est survenue pendant l'opération.");
+    }
+});
+
+// ====================== LANCEMENT ======================
+client.login(config.token).catch(console.error);
